@@ -7,9 +7,9 @@ logger = logging.getLogger(__name__)
 BASE_URL = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php'
 
 ENDPOINTS = {
-    'current_weather': {'dataType': 'rhrread', 'lang': 'en'},
-    'warning_summary': {'dataType': 'warnsum', 'lang': 'en'},
-    'forecast': {'dataType': 'flw', 'lang': 'en'},
+    'current_weather': {'dataType': 'rhrread', 'lang': 'en'}, # Hong Kong District Weather Report - every hour update
+    'warning_summary': {'dataType': 'warnsum', 'lang': 'en'}, # Special Weather Warning - every 10 minutes update
+    'forecast': {'dataType': 'flw', 'lang': 'en'}, # Weather Forecast - every hour update
 }
 
 REQUEST_TIMEOUT = 10
