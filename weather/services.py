@@ -6,16 +6,24 @@ logger = logging.getLogger(__name__)
 
 BASE_URL = 'https://data.weather.gov.hk/weatherAPI/opendata/weather.php'
 
+SUPPORTED_LANGS = ('en', 'tc')
+
+HKO_PLACE_KEY = {
+    'en': 'Hong Kong Observatory',
+    'tc': '香港天文台',
+}
+
 ENDPOINTS = {
-    'current_weather': {'dataType': 'rhrread', 'lang': 'en'}, # Hong Kong District Weather Report - every hour update
-    'warning_summary': {'dataType': 'warnsum', 'lang': 'en'}, # Special Weather Warning - every 10 minutes update
-    'forecast': {'dataType': 'flw', 'lang': 'en'}, # Weather Forecast - every hour update
+    'current_weather': 'rhrread',
+    'warning_summary': 'warnsum',
+    'forecast': 'flw',
 }
 
 REQUEST_TIMEOUT = 10
 
 
-def _fetch_json(params: dict) -> dict | None:
+def _fetch_json(data_type: str, lang: str = 'en') -> dict | None:
+    params = {'dataType': data_type, 'lang': lang}
     try:
         resp = requests.get(BASE_URL, params=params, timeout=REQUEST_TIMEOUT)
         resp.raise_for_status()
@@ -33,40 +41,37 @@ def _parse_hkt(iso_string: str) -> str:
         return iso_string or ''
 
 
-def fetch_current_weather() -> dict:
-    data = _fetch_json(ENDPOINTS['current_weather'])
+def fetch_current_weather(lang: str = 'en') -> dict:
+    data = _fetch_json(ENDPOINTS['current_weather'], lang)
     if not data:
         return {}
 
     update_time = _parse_hkt(data.get('updateTime', ''))
+    hko_place = HKO_PLACE_KEY.get(lang, HKO_PLACE_KEY['en'])
 
     humidity_block = data.get('humidity', {})
-    humidity_data = humidity_block.get('data', [])
     hko_humidity = None
-    for h in humidity_data:
-        if h.get('place') == 'Hong Kong Observatory':
+    for h in humidity_block.get('data', []):
+        if h.get('place') == hko_place:
             hko_humidity = h.get('value')
             break
 
     temp_block = data.get('temperature', {})
     temp_record_time = _parse_hkt(temp_block.get('recordTime', ''))
-    all_temps = temp_block.get('data', [])
 
     hko_temp = None
     district_temps = []
-    for t in all_temps:
-        entry = {
+    for t in temp_block.get('data', []):
+        district_temps.append({
             'place': t.get('place', ''),
             'value': t.get('value'),
             'unit': t.get('unit', 'C'),
-        }
-        district_temps.append(entry)
-        if t.get('place') == 'Hong Kong Observatory':
+        })
+        if t.get('place') == hko_place:
             hko_temp = t.get('value')
 
-    rainfall_block = data.get('rainfall', {})
     rainfall_data = []
-    for r in rainfall_block.get('data', []):
+    for r in data.get('rainfall', {}).get('data', []):
         rainfall_data.append({
             'place': r.get('place', ''),
             'max': r.get('max', 0),
@@ -75,9 +80,6 @@ def fetch_current_weather() -> dict:
             'is_main': r.get('main') == 'TRUE',
         })
 
-    icon_codes = data.get('icon', [])
-    warning_messages = data.get('warningMessage', [])
-
     return {
         'update_time': update_time,
         'record_time': temp_record_time,
@@ -85,13 +87,13 @@ def fetch_current_weather() -> dict:
         'hko_humidity': hko_humidity,
         'district_temperatures': district_temps,
         'rainfall': rainfall_data,
-        'icon_codes': icon_codes,
-        'warning_messages': warning_messages,
+        'icon_codes': data.get('icon', []),
+        'warning_messages': data.get('warningMessage', []),
     }
 
 
-def fetch_warning_summary() -> list[dict]:
-    data = _fetch_json(ENDPOINTS['warning_summary'])
+def fetch_warning_summary(lang: str = 'en') -> list[dict]:
+    data = _fetch_json(ENDPOINTS['warning_summary'], lang)
     if not data:
         return []
 
@@ -109,8 +111,8 @@ def fetch_warning_summary() -> list[dict]:
     return warnings
 
 
-def fetch_forecast() -> dict:
-    data = _fetch_json(ENDPOINTS['forecast'])
+def fetch_forecast(lang: str = 'en') -> dict:
+    data = _fetch_json(ENDPOINTS['forecast'], lang)
     if not data:
         return {}
 
@@ -125,13 +127,12 @@ def fetch_forecast() -> dict:
     }
 
 
-def get_all_weather_data() -> dict:
-    current = fetch_current_weather()
-    warnings = fetch_warning_summary()
-    forecast = fetch_forecast()
+def get_all_weather_data(lang: str = 'en') -> dict:
+    if lang not in SUPPORTED_LANGS:
+        lang = 'en'
 
     return {
-        'current_weather': current,
-        'warnings': warnings,
-        'forecast': forecast,
+        'current_weather': fetch_current_weather(lang),
+        'warnings': fetch_warning_summary(lang),
+        'forecast': fetch_forecast(lang),
     }
